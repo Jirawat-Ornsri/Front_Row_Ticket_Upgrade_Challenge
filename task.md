@@ -4,7 +4,7 @@
 - [x] 2. Eligibility Filtering
 - [x] 3. Fan Grouping (Union-Find)
 - [x] 4. Scoring & Winner Selection
-- [ ] 5. UI & Interactive Features
+- [x] 5. UI & Interactive Features
 - [ ] 6. Tests, Performance & README
 
 ## Task 4 Scoring Policy
