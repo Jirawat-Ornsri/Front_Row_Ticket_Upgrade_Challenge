@@ -5,7 +5,9 @@
 - [x] 3. Fan Grouping (Union-Find)
 - [x] 4. Scoring & Winner Selection
 - [x] 5. UI & Interactive Features
-- [ ] 6. Tests, Performance & README
+- [x] 6. Tests, Performance & README
+
+Task 6 complete: Rush Hour, VIP Hour, and Fair Queue Mode implemented and documented; 41 tests passed across 4 files; TypeScript type checking and production build passed. No 100,000–500,000-entry benchmark was run, and no lint script is configured. The production build regenerated `next-env.d.ts`.
 
 ## Task 4 Scoring Policy
 

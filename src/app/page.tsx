@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { buildFrontRowUpgradeQueue } from "../domain/queue";
 import { mockEntries } from "../data/mockEntries";
-import type { RankedEntry, TicketQueueEntry } from "../domain/types";
+import type { QueueMode, RankedEntry, TicketQueueEntry } from "../domain/types";
 
 const initialNow = new Date("2026-11-10T10:00:00+07:00");
 const timeSteps = [
@@ -47,8 +47,9 @@ function CandidateCard({ candidate, winner = false, rank }: { candidate: RankedE
 export default function Home() {
   const [entries, setEntries] = useState<TicketQueueEntry[]>(() => mockEntries.map((entry) => ({ ...entry })));
   const [now, setNow] = useState(initialNow);
+  const [mode, setMode] = useState<QueueMode>("default");
   const [loyaltyDrafts, setLoyaltyDrafts] = useState<Record<string, string>>({});
-  const result = useMemo(() => buildFrontRowUpgradeQueue(entries, now), [entries, now]);
+  const result = useMemo(() => buildFrontRowUpgradeQueue(entries, now, mode), [entries, now, mode]);
 
   function updateLoyalty(id: string, raw: string) {
     setLoyaltyDrafts((current) => ({ ...current, [id]: raw }));
@@ -67,7 +68,7 @@ export default function Home() {
 
   return <main className="dashboard">
     <header className="page-header">
-      <div><p className="eyebrow">LIVE EVENT OPERATIONS</p><h1>Front Row Upgrade Queue</h1><p className="subtitle">A clear view of the queue, the decision, and what shapes it.</p></div>
+      <div><p className="eyebrow">LIVE EVENT OPERATIONS</p><h1>Front Row Upgrade Queue</h1><p className="subtitle">A clear view of the queue, the decision, and what shapes it.</p><label>Queue mode <select value={mode} onChange={(event) => setMode(event.target.value as QueueMode)}><option value="default">Default</option><option value="rush-hour">Rush Hour</option><option value="vip-hour">VIP Hour</option><option value="fair-queue">Fair Queue Mode</option></select></label></div>
       <div className="clock-card"><span className="clock-label">SIMULATED CURRENT TIME</span><strong>{displayTime(now)}</strong><div className="time-buttons" aria-label="Advance simulated time">{timeSteps.map(({ label, minutes }) => <button key={minutes} type="button" onClick={() => setNow((current) => new Date(current.getTime() + minutes * 60_000))}>{label}</button>)}</div></div>
     </header>
 

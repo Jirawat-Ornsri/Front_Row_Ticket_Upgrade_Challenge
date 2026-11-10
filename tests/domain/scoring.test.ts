@@ -59,4 +59,33 @@ describe("buildFrontRowUpgradeQueue", () => {
     ], now);
     expect(result.winner?.entry.id).toBe("a");
   });
+
+  it("keeps default identical and gives Rush Hour a larger waiting-time weight", () => {
+    const input = [entry("old", { joinedQueueAt: "2026-01-01T10:00:00Z" }), entry("new", { joinedQueueAt: "2026-01-01T11:00:00Z" })];
+    expect(buildFrontRowUpgradeQueue(input, now, "default")).toEqual(buildFrontRowUpgradeQueue(input, now));
+    expect(buildFrontRowUpgradeQueue(input, now, "rush-hour").rankedCandidates[0].score - buildFrontRowUpgradeQueue(input, now, "rush-hour").rankedCandidates[1].score).toBe(60);
+  });
+
+  it("boosts VIP modestly in VIP Hour without making VIP a guaranteed winner", () => {
+    const vip = entry("vip", { membership: "vip", loyaltyPoints: 0 });
+    const regular = entry("regular", { membership: "regular", loyaltyPoints: 100 });
+    const result = buildFrontRowUpgradeQueue([vip, regular], now, "vip-hour");
+    expect(result.rankedCandidates[0].entry.id).toBe("regular");
+    expect(result.rankedCandidates.find(({ entry: e }) => e.id === "vip")?.score).toBeGreaterThan(buildFrontRowUpgradeQueue([vip, regular], now).rankedCandidates.find(({ entry: e }) => e.id === "vip")?.score ?? 0);
+  });
+
+  it("increases known upgrade penalties and preserves unknown histories in Fair Queue Mode", () => {
+    const input = [entry("clean", { upgradesLast30Days: 0 }), entry("upgraded", { upgradesLast30Days: 5 })];
+    const fair = buildFrontRowUpgradeQueue(input, now, "fair-queue");
+    expect(fair.rankedCandidates.find(({ entry: e }) => e.id === "clean")!.score - fair.rankedCandidates.find(({ entry: e }) => e.id === "upgraded")!.score).toBeGreaterThan(buildFrontRowUpgradeQueue(input, now).rankedCandidates.find(({ entry: e }) => e.id === "clean")!.score - buildFrontRowUpgradeQueue(input, now).rankedCandidates.find(({ entry: e }) => e.id === "upgraded")!.score);
+    const unknown = buildFrontRowUpgradeQueue([entry("x", { upgradesLast30Days: null }), entry("y", { upgradesLast30Days: 3 })], now, "fair-queue");
+    expect(unknown.rankedCandidates[0].reasons.join(" ")).toContain("unknown");
+  });
+
+  it("does not mutate inputs and is deterministic for each mode", () => {
+    const input = [entry("a", { upgradesLast30Days: 1 }), entry("b", { membership: "vip", upgradesLast30Days: 2 })];
+    const before = structuredClone(input);
+    for (const mode of ["default", "rush-hour", "vip-hour", "fair-queue"] as const) expect(buildFrontRowUpgradeQueue(input, now, mode)).toEqual(buildFrontRowUpgradeQueue(input, now, mode));
+    expect(input).toEqual(before);
+  });
 });

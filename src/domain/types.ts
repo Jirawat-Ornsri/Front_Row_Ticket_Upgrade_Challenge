@@ -14,6 +14,8 @@ export type TicketQueueEntry = {
   paymentAccount?: string | null;
 };
 
+export type QueueMode = "default" | "rush-hour" | "vip-hour" | "fair-queue";
+
 export type ExcludedEntry = {
   entry: TicketQueueEntry;
   reason: string;

@@ -1,4 +1,4 @@
-import type { FanGroup, RankedEntry, TicketQueueEntry } from "./types";
+import type { FanGroup, QueueMode, RankedEntry, TicketQueueEntry } from "./types";
 
 export const scoringWeights = {
   waitingTime: 0.4,
@@ -12,8 +12,10 @@ type ScoreInput = { entry: TicketQueueEntry; upgrades: number | null };
 type Factor = "waitingTime" | "loyaltyPoints" | "ticketValue" | "recentUpgrades";
 
 function normalize(values: number[], value: number): number {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  if (values.length === 0) return 0.5;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const candidate of values) { min = Math.min(min, candidate); max = Math.max(max, candidate); }
   return min === max ? 0.5 : (value - min) / (max - min);
 }
 
@@ -37,13 +39,14 @@ function compareRanked(a: RankedEntry, b: RankedEntry): number {
     || (a.entry.id < b.entry.id ? -1 : a.entry.id > b.entry.id ? 1 : 0);
 }
 
-export function scoreGroupRepresentatives(groups: FanGroup[], now: Date): FanGroup[] {
+export function scoreGroupRepresentatives(groups: FanGroup[], now: Date, mode: QueueMode = "default"): FanGroup[] {
   const inputs: ScoreInput[] = groups.flatMap((group) => {
     const hasUnknown = group.entries.some((entry) => entry.upgradesLast30Days == null
       || !Number.isFinite(entry.upgradesLast30Days));
     const upgrades = hasUnknown ? null : group.entries.reduce((sum, entry) => sum + entry.upgradesLast30Days!, 0);
     return group.entries.map((entry) => ({ entry, upgrades }));
   });
+  const scoreInputByEntry = new Map(inputs.map((input) => [input.entry, input]));
   const values: Record<Factor, number[]> = {
     waitingTime: inputs.map(({ entry }) => waitMs(entry, now)),
     loyaltyPoints: inputs.map(({ entry }) => entryNumber(entry.loyaltyPoints)),
@@ -53,7 +56,7 @@ export function scoreGroupRepresentatives(groups: FanGroup[], now: Date): FanGro
 
   return groups.map((group) => {
     const ranked = group.entries.map((entry): RankedEntry => {
-      const source = inputs.find((item) => item.entry === entry)!;
+      const source = scoreInputByEntry.get(entry)!;
       const components = {
         waitingTime: normalize(values.waitingTime, waitMs(entry, now)),
         loyaltyPoints: normalize(values.loyaltyPoints, entryNumber(entry.loyaltyPoints)),
@@ -61,19 +64,23 @@ export function scoreGroupRepresentatives(groups: FanGroup[], now: Date): FanGro
         ticketValue: normalize(values.ticketValue, entryNumber(typeof entry.ticketValue === "string" ? Number(entry.ticketValue) : entry.ticketValue)),
         recentUpgrades: source.upgrades === null ? null : 1 - normalize(values.recentUpgrades, source.upgrades),
       };
-      const activeWeight = source.upgrades === null ? 1 - scoringWeights.recentUpgrades : 1;
+      const weights: Record<keyof typeof scoringWeights, number> = { ...scoringWeights };
+      if (mode === "rush-hour") { weights.waitingTime = 0.6; weights.loyaltyPoints = 0.05; }
+      if (mode === "vip-hour") weights.membership = 0.25;
+      if (mode === "fair-queue") weights.recentUpgrades = 0.25;
+      const activeWeight = source.upgrades === null ? 1 - weights.recentUpgrades : 1;
       const score = Object.entries(components).reduce((sum, [factor, value]) => {
         if (value === null) return sum;
-        return sum + value * scoringWeights[factor as keyof typeof scoringWeights] / activeWeight;
+        return sum + value * weights[factor as keyof typeof weights] / activeWeight;
       }, 0) * 100;
       const reasons = [
-        `Waiting ${formatDuration(waitMs(entry, now))}: ${points(components.waitingTime, scoringWeights.waitingTime, activeWeight)} points.`,
-        `${entry.membership === "vip" ? "VIP membership bonus" : "Regular membership"}: ${points(components.membership, scoringWeights.membership, activeWeight)} points.`,
-        `Loyalty ${entryNumber(entry.loyaltyPoints)} points: ${points(components.loyaltyPoints, scoringWeights.loyaltyPoints, activeWeight)} points.`,
-        `Ticket value ${entry.ticketValue}: ${points(components.ticketValue, scoringWeights.ticketValue, activeWeight)} points.`,
+        `Waiting ${formatDuration(waitMs(entry, now))}: ${points(components.waitingTime, weights.waitingTime, activeWeight)} points.`,
+        `${entry.membership === "vip" ? "VIP membership bonus" : "Regular membership"}: ${points(components.membership, weights.membership, activeWeight)} points.`,
+        `Loyalty ${entryNumber(entry.loyaltyPoints)} points: ${points(components.loyaltyPoints, weights.loyaltyPoints, activeWeight)} points.`,
+        `Ticket value ${entry.ticketValue}: ${points(components.ticketValue, weights.ticketValue, activeWeight)} points.`,
         source.upgrades === null
           ? "Recent upgrades unknown (at least one group account has missing history); this factor is omitted and other weights are rescaled."
-          : `${source.upgrades} recent upgrades across the group: ${points(components.recentUpgrades!, scoringWeights.recentUpgrades, activeWeight)} points.`,
+          : `${source.upgrades} recent upgrades across the group: ${points(components.recentUpgrades!, weights.recentUpgrades, activeWeight)} points.`,
       ];
       return { entry, score: Number(score.toFixed(6)), reasons };
     }).sort(compareRanked);
