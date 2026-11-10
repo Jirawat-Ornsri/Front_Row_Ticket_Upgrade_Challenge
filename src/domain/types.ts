@@ -36,4 +36,6 @@ export type FrontRowUpgradeResult = {
   winner: RankedEntry | null;
   fanGroups: FanGroup[];
   excludedEntries: ExcludedEntry[];
+  rankedCandidates: RankedEntry[];
+  topCandidates: RankedEntry[];
 };
